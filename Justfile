@@ -80,26 +80,45 @@ sudoif command *args:
 # Arguments:
 #   $target_image - The tag you want to apply to the image (default: $image_name).
 #   $tag - The tag for the image (default: $default_tag).
+#   $flavor - The GPU vendor variant to build: amd or nvidia (default: amd).
+#             Selects the base image and threads GPU_VENDOR into the
+#             Containerfile via --build-arg, so this is the single source
+#             of truth for which vendor a given build produces.
 #
 # The script constructs the version string using the tag and the current date.
 # If the git working directory is clean, it also includes the short SHA of the current HEAD.
 #
-# just build $target_image $tag
+# just build $target_image $tag $flavor
 #
 # Example usage:
-#   just build myimage mytag
+#   just build myimage mytag amd
 #
-# This will build an image 'myimage:mytag'
+# This will build an image 'myimage:mytag' as the amd flavor
 #
 
 # Build the image using the specified parameters
-build $target_image=image_name $tag=default_tag:
+build $target_image=image_name $tag=default_tag $flavor="amd":
     #!/usr/bin/env bash
 
     set -euox pipefail
 
     BUILD_ARGS=()
     LABELS=()
+
+    case "${flavor}" in
+        amd)
+            BUILD_ARGS+=("--build-arg" "BASE_IMAGE=ghcr.io/ublue-os/bazzite-gnome")
+            ;;
+        nvidia)
+            BUILD_ARGS+=("--build-arg" "BASE_IMAGE=ghcr.io/ublue-os/bazzite-gnome-nvidia-open")
+            ;;
+        *)
+            echo "Unknown flavor: ${flavor}" >&2
+            exit 1
+            ;;
+    esac
+    BUILD_ARGS+=("--build-arg" "GPU_VENDOR=${flavor}")
+
     if [[ -z "$(git status -s)" ]]; then
         GIT_SHA=$(git rev-parse --short HEAD)
         LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/{{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
@@ -122,7 +141,9 @@ build $target_image=image_name $tag=default_tag:
     LABELS+=("--label" "org.opencontainers.image.vendor={{ repo_organization }}")
 
     # This actually builds the image!
-    PODMAN_BUILD_ARGS=("${BUILD_ARGS[@]}" "${LABELS[@]}" --pull=newer --tag "${target_image}:${tag}" --file Containerfile)
+    #
+    # NOTE: --layers=false was fix for slow performance on container build where even COPY commands were taking over 20 mins
+    PODMAN_BUILD_ARGS=("${BUILD_ARGS[@]}" "${LABELS[@]}" --layers=false --pull=newer --tag "${target_image}:${tag}" --file Containerfile)
 
     podman build "${PODMAN_BUILD_ARGS[@]}" .
 
@@ -195,8 +216,11 @@ generate-default-tag $tag=default_tag:
     echo "${tag}"
 
 # Generate Tags
+#
+# $flavor is prefixed onto every generated tag so the amd and nvidia builds
+# never collide in the registry (e.g. amd-latest, nvidia-latest-20260728).
 [group('Utility')]
-generate-build-tags $target_image=image_name $tag=default_tag:
+generate-build-tags $target_image=image_name $tag=default_tag $flavor="amd":
     #!/usr/bin/env bash
     set -eoux pipefail
 
@@ -204,14 +228,14 @@ generate-build-tags $target_image=image_name $tag=default_tag:
     BUILD_TAGS=()
     if [[ -z "$(git status -s)" ]]; then
         GIT_SHA=$(git rev-parse --short HEAD)
-        BUILD_TAGS+=("${tag}-${GIT_SHA}")
-        BUILD_TAGS+=("${tag}-${DATE}-${GIT_SHA}")
-        BUILD_TAGS+=("${DATE}-${GIT_SHA}")
+        BUILD_TAGS+=("${flavor}-${tag}-${GIT_SHA}")
+        BUILD_TAGS+=("${flavor}-${tag}-${DATE}-${GIT_SHA}")
+        BUILD_TAGS+=("${flavor}-${DATE}-${GIT_SHA}")
     fi
 
-    BUILD_TAGS+=("${DATE}")
-    BUILD_TAGS+=("${tag}")
-    BUILD_TAGS+=("${tag}-${DATE}")
+    BUILD_TAGS+=("${flavor}-${DATE}")
+    BUILD_TAGS+=("${flavor}-${tag}")
+    BUILD_TAGS+=("${flavor}-${tag}-${DATE}")
 
     echo "${BUILD_TAGS[@]}"
 
