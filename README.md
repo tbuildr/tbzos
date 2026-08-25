@@ -165,6 +165,11 @@ issues, `rpm-ostree
 status` will show whether anything about the deployment
 looks unusual.
 
+## Updating Universal Blue template
+
+See [docs/UPDATING.md](docs/UPDATING.md) for the procedure to sync this image
+with upstream changes.
+
 ## Credits
 
 Built on
