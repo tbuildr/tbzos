@@ -109,3 +109,7 @@ if [ "${GPU_VENDOR}" = "amd" ]; then
 fi
 
 dnf5 install -y "${INSTALL_PKGS[@]}"
+
+# Clean dnf5 cache — needed since we no longer use --mount=type=cache
+# (rootless buildah cache mounts currently broken on GH Actions runners)
+dnf5 clean all

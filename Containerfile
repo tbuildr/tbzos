@@ -12,10 +12,10 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # Redeclared post-FROM: ARGs above FROM don't carry into the build stage.
 ARG GPU_VENDOR=amd
 
-# dnf5 cache
-RUN --mount=type=cache,dst=/var/cache \
-    --mount=type=cache,dst=/var/cache/libdnf5 \
- dnf5 config-manager setopt keepcache=1
+# Cache mounts removed - currently broken on GH Actions ubuntu-24.04 runners
+# with rootless buildah (crun permission denied on bundle dir creation).
+# Revisit once upstream/runner resolves it.
+RUN dnf5 config-manager setopt keepcache=1
 
 # Copy repo files to /tmp
 COPY build_files/ /tmp/tbzos-build_files/
@@ -23,8 +23,7 @@ COPY config/ /tmp/tbzos-config/
 COPY assets/ /tmp/tbzos-assets/
 COPY --chmod=0644 ./cosign.pub /tmp/tbzos.pub
 
-RUN --mount=type=cache,dst=/var/cache/libdnf5 \
-    /tmp/tbzos-build_files/00-packages.sh "${GPU_VENDOR}"
+RUN /tmp/tbzos-build_files/00-packages.sh "${GPU_VENDOR}"
 
 RUN /tmp/tbzos-build_files/01-config-files.sh
 
