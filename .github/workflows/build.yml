@@ -53,12 +53,6 @@ jobs:
         with:
           extra-squeeze: true
 
-      # Add if fuse-overlayfs (fsync=0) causing failures
-      - name: Use native overlay storage
-        run: |
-          sudo mkdir -p /etc/containers
-          printf '[storage]\ndriver = "overlay"\n\n[storage.options.overlay]\nmountopt = "nodev"\n' | sudo tee /etc/containers/storage.conf
-
       - name: Podman environment
         run: |
           sudo cat /etc/containers/storage.conf || true
