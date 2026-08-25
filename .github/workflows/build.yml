@@ -32,12 +32,11 @@ jobs:
   build_push:
     name: Build and push image
     runs-on: ubuntu-24.04
-
-  strategy:
-    fail-fast: false
-    matrix:
-      variant: [amd]
-    # variant: [amd, nvidia]
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [amd]
+        # variant: [amd, nvidia]
 
     permissions:
       contents: read
