@@ -35,8 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [amd]
-        # variant: [amd, nvidia]
+        variant: [amd, nvidia]
 
     permissions:
       contents: read
