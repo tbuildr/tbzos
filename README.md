@@ -10,7 +10,9 @@ removed — I don't use them. Nix is installed for
 dotfiles and packages separately from this image. I prefer this declarative
 approach than using brew. I keep flatpak use to a minimum. You will also get
 Brave Browser, Chromium, Yubikey Manager, Mullvad-VPN that are intentionally
-baked into the image along with Ollama service and container quadlet.
+baked into the image along with Ollama service and container quadlet. Inbound
+networking is locked down by default: a deny-by-default firewalld zone and no
+LLMNR/mDNS (see [Firewall and LAN hardening](#firewall-and-lan-hardening)).
 
 Built with the
 [Universal Blue image-template](https://github.com/ublue-os/image-template).
@@ -82,9 +84,8 @@ sudo rpm-ostree initramfs --enable --reboot
 
 ## Updating
 
-If you've run the boot splash branding step below
-(`rpm-ostree initramfs
---enable`), your deployment has a local rpm-ostree
+If you've run the boot splash branding step above
+(`rpm-ostree initramfs --enable`), your deployment has a local rpm-ostree
 modification, and **`bootc upgrade` will refuse** with "Deployment contains
 local rpm-ostree modifications." Use `rpm-ostree upgrade` instead:
 
@@ -153,7 +154,7 @@ systemctl reboot
 Rebasing across substantially different desktops can leave stale user config
 behind — a clean profile is sometimes worth it.
 
-### Mullvad VPN
+## Mullvad VPN
 
 Baked into the image (`mullvad-daemon` enabled by default). Mullvad officially
 lists Fedora Atomic as unsupported — that's specifically about `rpm-ostree`'s
@@ -164,6 +165,86 @@ confirmed by checking `systemctl status mullvad-daemon` after boot. If you hit
 issues, `rpm-ostree
 status` will show whether anything about the deployment
 looks unusual.
+
+## Firewall and LAN hardening
+
+The image now ships its own firewalld zone, **`tbzos`**, as the default zone,
+and turns off LLMNR and mDNS. Nothing on a desktop needs to accept connections
+from the LAN, so the image doesn't.
+
+| What                                                                                                   | In the image                                        | Source in this repo                |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | ---------------------------------- |
+| Zone `tbzos`: inbound **only DHCPv6 replies**; everything else rejected; no forwarding within the zone | `/usr/lib/firewalld/zones/tbzos.xml`                | `config/firewalld/tbzos.xml`       |
+| `DefaultZone=tbzos`, `firewalld` enabled                                                               | `/etc/firewalld/firewalld.conf` (image default)     | `build_files/02-services.sh`       |
+| `LLMNR=no`, `MulticastDNS=no` (both spoofable on a LAN)                                                | `/usr/lib/systemd/resolved.conf.d/50-no-llmnr.conf` | `config/resolved/50-no-llmnr.conf` |
+
+- It replaces the base image's default zone. Fedora's desktop zones open TCP/UDP
+  1025–65535 to the whole LAN.
+- **The build fails** if the result is wrong: `02-services.sh` runs
+  `firewall-offline-cmd --check-config` and checks the default zone, that
+  `dhcpv6-client` is the only service, that no ports are open and that the LLMNR
+  drop-in is there.
+- The zone is **generic**: no addresses, interfaces or hostnames, so it fits any
+  machine.
+- Outbound is unrestricted. Mullvad uses its own nftables table, separate from
+  firewalld's.
+- **Mullvad lockdown mode is per machine**, not baked in. It lives in Mullvad's
+  own settings, and baking it in would block a new install before it signs in:
+  `mullvad lockdown-mode set on`.
+
+**Side effects.** Anything that waits for LAN connections is blocked, for
+example Steam Remote Play and local game transfers (`27036`), KDE Connect, a LAN
+game server or `.local` name lookups through resolved. If one machine needs one
+of these, open it **locally** on that machine:
+
+```sh
+sudo firewall-cmd --permanent --zone=tbzos --add-service=steam-streaming   # example
+sudo firewall-cmd --reload
+```
+
+That writes a copy of the zone to `/etc/firewalld/zones/tbzos.xml`, which takes
+precedence over the image's. It shows up in `sudo ostree admin config-diff`, and
+from then on that machine no longer gets image updates to the zone. Delete the
+`/etc` copy to go back to the image's zone. Anything every tbzos machine needs
+goes in `config/firewalld/tbzos.xml` instead.
+
+**Checking a machine:**
+
+```sh
+firewall-cmd --get-default-zone                          # tbzos
+firewall-cmd --get-active-zones                          # tbzos: <your interface>
+firewall-cmd --zone=tbzos --list-all                     # services: dhcpv6-client, ports: (none), forward: no
+nmcli -g NAME,connection.zone connection show --active   # zone empty = uses the default
+resolvectl status | grep -E 'LLMNR|MulticastDNS'         # -LLMNR -mDNS
+sudo ostree admin config-diff | grep -E 'firewalld|resolved'   # local overrides, ideally none
+```
+
+A NetworkManager connection with its own `connection.zone` ignores the default.
+Clear it with `sudo nmcli connection modify "<name>" connection.zone ""`.
+
+**Checking an image before publishing it:**
+
+```sh
+IMG=localhost/tbzos:latest
+podman run --rm "$IMG" firewall-offline-cmd --get-default-zone           # tbzos
+podman run --rm "$IMG" firewall-offline-cmd --zone=tbzos --list-all
+podman run --rm "$IMG" cat /usr/lib/systemd/resolved.conf.d/50-no-llmnr.conf
+```
+
+**Moving from a hand-made setup.** On a machine where the zone or the drop-in
+were created by hand before this, remove the local copies after upgrading, so
+the image is the only source:
+
+```sh
+sudo ostree admin config-diff | grep -E 'firewalld|resolved'   # see what's local first
+sudo rm -f /etc/firewalld/zones/tbzos.xml /etc/firewalld/zones/tbzos.xml.old
+sudo rm -f /etc/systemd/resolved.conf.d/50-no-llmnr.conf
+sudo firewall-cmd --reload && sudo systemctl restart systemd-resolved
+```
+
+`/etc` stays writable by root on any atomic system. The image stops accidental
+drift and makes rollback reliable, but it doesn't protect against someone who
+already has root. `config-diff` is how you spot local changes.
 
 ## Updating Universal Blue template
 
