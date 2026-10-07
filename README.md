@@ -214,7 +214,7 @@ goes in `config/firewalld/tbzos.xml` instead.
 firewall-cmd --get-default-zone                          # tbzos
 firewall-cmd --get-active-zones                          # tbzos: <your interface>
 firewall-cmd --zone=tbzos --list-all                     # services: dhcpv6-client, ports: (none), forward: no
-nmcli -g NAME,connection.zone connection show --active   # zone empty = uses the default
+for u in $(nmcli -g UUID connection show --active); do nmcli -g connection.id,connection.zone connection show "$u"; done   # zone empty = default
 resolvectl status | grep -E 'LLMNR|MulticastDNS'         # -LLMNR -mDNS
 sudo ostree admin config-diff | grep -E 'firewalld|resolved'   # local overrides, ideally none
 ```
