@@ -34,4 +34,8 @@ install -m 0644 /tmp/tbzos-assets/tbzos-fastfetch.png \
   /usr/share/fastfetch/os-logo.png
 install -m 0644 /tmp/tbzos-assets/tbzos-plymouth.png \
   /usr/share/plymouth/themes/spinner/watermark.png
+# Firewall zone + LLMNR/mDNS off — in /usr/lib so /etc stays free for local overrides
+install -D -m 0644 /tmp/tbzos-config/firewalld/tbzos.xml /usr/lib/firewalld/zones/tbzos.xml
+install -D -m 0644 /tmp/tbzos-config/resolved/50-no-llmnr.conf \
+  /usr/lib/systemd/resolved.conf.d/50-no-llmnr.conf
 rm -rf /tmp/tbzos-config /tmp/tbzos-assets
