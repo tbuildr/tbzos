@@ -40,6 +40,7 @@ curl -fsSLo /etc/yum.repos.d/mullvad.repo \
 # Not sure about these yet...
 # dnf5 -y remove fw-fanctrl
 # dnf5 -y remove xwaylandvideobridge
+# orca is GNOME orca - screen reader
 
 REMOVE_PKGS=(
   lutris
@@ -73,6 +74,7 @@ REMOVE_PKGS=(
   NetworkManager-openconnect-gnome
   NetworkManager-vpnc-gnome
   NetworkManager-openvpn-gnome
+  orca
 )
 dnf5 remove -y --no-autoremove "${REMOVE_PKGS[@]}"
 
